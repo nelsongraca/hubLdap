@@ -8,7 +8,7 @@ import retrofit2.http.*;
 
 public interface HubClient {
 
-    @GET("usergroups")
+    @GET("usergroups?fields=total,type,id,name")
     Call<UserGroupsResponse> getUserGroups(@Header("Authorization") String authorization, @Query("$skip") int start, @Query("$top") int limit);
 
     @GET("users")

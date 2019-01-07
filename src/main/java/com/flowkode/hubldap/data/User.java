@@ -15,11 +15,15 @@ public class User {
     @SerializedName("transitiveGroups")
     private final UserGroup[] groups;
 
-    public User(String id, String name, String login, boolean banned, UserGroup[] groups) {
+    private final Profile profile;
+
+
+    public User(String id, String name, String login, boolean banned, Profile profile, UserGroup[] groups) {
         this.id = id;
         this.name = name;
         this.login = login;
         this.banned = banned;
+        this.profile = profile;
         this.groups = groups;
     }
 
@@ -37,6 +41,10 @@ public class User {
 
     public boolean isBanned() {
         return banned;
+    }
+
+    public Profile getProfile() {
+        return profile;
     }
 
     public UserGroup[] getGroups() {

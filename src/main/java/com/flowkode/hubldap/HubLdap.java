@@ -1,7 +1,6 @@
 package com.flowkode.hubldap;
 
 
-import com.flowkode.hubldap.data.*;
 import org.apache.directory.api.ldap.model.entry.DefaultEntry;
 import org.apache.directory.api.ldap.model.entry.DefaultModification;
 import org.apache.directory.api.ldap.model.entry.ModificationOperation;
@@ -32,30 +31,26 @@ import org.apache.directory.server.ldap.LdapServer;
 import org.apache.directory.server.protocol.shared.transport.TcpTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import retrofit2.Response;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class HubLdap {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HubLdap.class);
 
-    private static final int CHUNK_SIZE = 1;
 
     private final InstanceLayout instanceLayout;
 
-    private final HubClient hubClient;
+    private final String dcDn;
 
-    private final String serviceId;
-
-    private final String serviceSecret;
+    private final HubDataSynchronizer dataSynchronizer;
 
     private int serverPort = 10389;
 
@@ -71,20 +66,33 @@ public class HubLdap {
 
     private DirectoryService directoryService;
 
+    private final Directory directory = new Directory() {
+        @Override
+        public void addStaticData(String dnStr, String... attrs) {
+            try {
+                directoryService.getAdminSession().add(new DefaultEntry(schemaManager, new Dn(dnStr), attrs));
+            }
+            catch (LdapException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        @Override
+        public String getDcDn() {
+            return dcDn;
+        }
+    };
+
     private String adminPassword = "test";
 
-    private HashMap<String, String> groups = new HashMap<>();
+    public HubLdap(String rootDomain, Path workDir, HubClient hubClient, String serviceId, String serviceSecret) throws Exception {
 
-
-    public HubLdap(Path workDir, HubClient hubClient, String serviceId, String serviceSecret) throws Exception {
-        this.serviceId = serviceId;
-        this.serviceSecret = serviceSecret;
-        this.hubClient = hubClient;
+        dataSynchronizer = new HubDataSynchronizer(directory, hubClient, serviceId, serviceSecret);
+        dcDn = "dc=" + Arrays.stream(rootDomain.split("\\.")).collect(Collectors.joining(",dc="));
 
         final File normalizedWorkDir = workDir.toAbsolutePath().normalize().toFile();
         FileUtils.deleteDirectory(normalizedWorkDir);
         instanceLayout = new InstanceLayout(normalizedWorkDir);
-
 
         configure();
     }
@@ -105,7 +113,7 @@ public class HubLdap {
         directoryService.setInstanceLayout(instanceLayout);
 
         directoryService.setCacheService(cacheService);
-//        directoryService.setAllowAnonymousAccess(true);
+        directoryService.setAllowAnonymousAccess(false);
 
         directoryService.startup();
     }
@@ -139,7 +147,7 @@ public class HubLdap {
             IOUtils.copy(ldif, target);
         }
 
-        Path objectClassesDir = schemaPath.resolve("ou=schema/cn=other/ou=objectClasses");
+        Path objectClassesDir = schemaPath.resolve("ou=schema/cn=other/ou=objectclasses");
         Files.createDirectories(objectClassesDir);
         try (
                 InputStream ldif = getClass().getClassLoader().getResourceAsStream("msprincipal.ldif");
@@ -176,28 +184,17 @@ public class HubLdap {
     }
 
     private void addHubPartition() throws LdapException {
-        JdbmPartition partition = new JdbmPartition(schemaManager, dnFactory);
-        partition.setId("hub");
-        Dn suffixDn = new Dn(schemaManager, "dc=hub");
-        partition.setSuffixDn(suffixDn);
-        partition.setPartitionPath(instanceLayout.getPartitionsDirectory().toPath().resolve("hub").toUri());
-        directoryService.addPartition(partition);
+        HubPartition hubPartition = new HubPartition(
+                schemaManager,
+                dnFactory,
+                directoryService,
+                instanceLayout.getPartitionsDirectory().toPath().resolve("hub").toUri()
+        );
+        Dn suffixDn = new Dn(schemaManager, dcDn);
+        hubPartition.setSuffixDn(suffixDn);
 
-        addStaticData("dc=hub",
-                      "objectClass:top",
-                      "objectClass:domain",
-                      "dc:hub"
-        );
-        addStaticData("ou=Users,dc=hub",
-                      "objectClass:top",
-                      "objectClass:organizationalUnit",
-                      "ou:Users"
-        );
-        addStaticData("ou=Groups,dc=hub",
-                      "objectClass:top",
-                      "objectClass:organizationalUnit",
-                      "ou:Groups"
-        );
+        directoryService.addPartition(hubPartition);
+        hubPartition.populate();
 
 //        logger.debug("" + service.getInterceptor("org.apache.directory.server.core.authn.AuthenticationInterceptor"));
 //        AuthenticationInterceptor ai = (AuthenticationInterceptor) service.getInterceptor("org.apache.directory.server.core.authn.AuthenticationInterceptor");
@@ -209,9 +206,6 @@ public class HubLdap {
 
     }
 
-    private void addStaticData(String dnStr, String... attrs) throws LdapException {
-        directoryService.getAdminSession().add(new DefaultEntry(schemaManager, new Dn(dnStr), attrs));
-    }
 
     private void buildLdapServer() {
         ldapServer = new LdapServer();
@@ -222,85 +216,7 @@ public class HubLdap {
 
     public void start() throws Exception {
         ldapServer.start();
-        loadData();
-    }
-
-    private void loadData() {
-        try {
-            String credentials = Base64.getEncoder().encodeToString((serviceId + ":" + serviceSecret).getBytes());
-            final Response<AuthResponse> response = hubClient.serviceLogin("Basic " + credentials).execute();
-            String token = response.body().getAccessToken();
-            loadUserGroups(token);
-            loadUsers(token);
-        }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
-        catch (LdapException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void loadUsers(String authToken) throws IOException, LdapException {
-        int total = Integer.MAX_VALUE;
-
-        int start = 0;
-        int limit = 1;
-
-        while (total > start) {
-            final Response<UsersResponse> response = hubClient.getUsers("Bearer " + authToken, start, limit).execute();
-            final UsersResponse body = response.body();
-            start += CHUNK_SIZE;
-            total = body.getTotal();
-
-            for (User user : body.getUsers()) {
-                addUser(user);
-            }
-        }
-    }
-
-    private void addUser(User user) throws LdapException {
-        final Set<String> attributes = Arrays.stream(user.getGroups())
-                                             .map(g -> this.groups.get(g.getId()))
-                                             .filter(Objects::nonNull)
-                                             .map(g -> "memberOf:" + g)
-                                             .collect(Collectors.toSet());
-
-        attributes.add("objectClass:top");
-        attributes.add("objectClass:inetOrgPerson");
-        attributes.add("objectClass:organizationalPerson");
-        attributes.add("objectClass:person");
-        attributes.add("objectClass:microsoftPrincipal");
-        attributes.add("cn:" + user.getName());
-        attributes.add("sn: ");
-        attributes.add("uid:" + user.getLogin());
-        addStaticData("cn=" + user.getName() + ",ou=Users,dc=hub", attributes.toArray(new String[0]));
-    }
-
-    private void loadUserGroups(String authToken) throws IOException, LdapException {
-        int total = Integer.MAX_VALUE;
-
-        int start = 0;
-        int limit = 1;
-
-        while (total > start) {
-            final Response<UserGroupsResponse> response = hubClient.getUserGroups("Bearer " + authToken, start, limit).execute();
-            final UserGroupsResponse body = response.body();
-            start += CHUNK_SIZE;
-            total = body.getTotal();
-
-            for (UserGroup userGroup : body.getUserGroups()) {
-                final String groupCn = "cn=" + userGroup.getName() + ",ou=Groups,dc=hub";
-                this.groups.put(userGroup.getId(), groupCn);
-                addStaticData(groupCn,
-                              "objectClass:top",
-                              "objectClass:groupOfNames",
-                              "member:dc=hub",
-                              "cn:" + userGroup.getName(),
-                              "description:" + userGroup.getId()
-                );
-            }
-        }
+        dataSynchronizer.sync();
     }
 
 }
