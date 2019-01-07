@@ -1,0 +1,10 @@
+version: 1
+dn: m-oid=1.2.840.113556.1.5.6, ou=objectclasses, cn=other, ou=schema
+objectclass: metaObjectClass
+objectclass: metaTop
+objectclass: top
+m-oid: 1.2.840.113556.1.5.6
+m-name: microsoftPrincipal
+m-supObjectClass: top
+m-typeObjectClass: AUXILIARY
+m-may: memberOf
