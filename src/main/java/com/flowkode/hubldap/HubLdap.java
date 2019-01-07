@@ -1,6 +1,7 @@
 package com.flowkode.hubldap;
 
 
+import org.apache.directory.api.ldap.model.constants.AuthenticationLevel;
 import org.apache.directory.api.ldap.model.entry.DefaultEntry;
 import org.apache.directory.api.ldap.model.entry.DefaultModification;
 import org.apache.directory.api.ldap.model.entry.ModificationOperation;
@@ -23,6 +24,8 @@ import org.apache.directory.server.core.api.DirectoryService;
 import org.apache.directory.server.core.api.DnFactory;
 import org.apache.directory.server.core.api.InstanceLayout;
 import org.apache.directory.server.core.api.schema.SchemaPartition;
+import org.apache.directory.server.core.authn.AuthenticationInterceptor;
+import org.apache.directory.server.core.authn.Authenticator;
 import org.apache.directory.server.core.partition.impl.btree.jdbm.JdbmPartition;
 import org.apache.directory.server.core.partition.ldif.LdifPartition;
 import org.apache.directory.server.core.shared.DefaultDnFactory;
@@ -39,6 +42,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class HubLdap {
@@ -51,6 +55,10 @@ public class HubLdap {
     private final String dcDn;
 
     private final HubDataSynchronizer dataSynchronizer;
+
+    private final HubClient hubClient;
+
+    private final HubAutenticator hubAutenticator;
 
     private int serverPort = 10389;
 
@@ -86,6 +94,8 @@ public class HubLdap {
     private String adminPassword = "test";
 
     public HubLdap(String rootDomain, Path workDir, HubClient hubClient, String serviceId, String serviceSecret) throws Exception {
+        this.hubClient = hubClient;
+        hubAutenticator = new HubAutenticator(hubClient, serviceId, serviceSecret);
 
         dataSynchronizer = new HubDataSynchronizer(directory, hubClient, serviceId, serviceSecret);
         dcDn = "dc=" + Arrays.stream(rootDomain.split("\\.")).collect(Collectors.joining(",dc="));
@@ -196,14 +206,11 @@ public class HubLdap {
         directoryService.addPartition(hubPartition);
         hubPartition.populate();
 
-//        logger.debug("" + service.getInterceptor("org.apache.directory.server.core.authn.AuthenticationInterceptor"));
-//        AuthenticationInterceptor ai = (AuthenticationInterceptor) service.getInterceptor("org.apache.directory.server.core.authn.AuthenticationInterceptor");
-//        Set<Authenticator> auths = new HashSet<>();
-//        auths.add(new CrowdAuthenticator(m_CrowdClient));
-//        ai.setAuthenticators(auths);
-//
-//        addCrowdPartition("crowd", "dc=crowd");
-
+        final AuthenticationInterceptor authenticationInterceptor = (AuthenticationInterceptor) directoryService.getInterceptor("authenticationInterceptor");
+        final Set<Authenticator> authenticators = authenticationInterceptor.getAuthenticators();
+        authenticators.removeIf(a -> a.getAuthenticatorType().equals(AuthenticationLevel.SIMPLE));
+        authenticators.add(hubAutenticator);
+        authenticationInterceptor.setAuthenticators(authenticators.toArray(new Authenticator[0])); //must use this one, read the sources if you want to know why
     }
 
 

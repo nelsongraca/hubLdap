@@ -14,6 +14,6 @@ public class Main {
                 .build();
 
         HubClient hubClient = retrofit.create(HubClient.class);
-        new HubLdap("hub.local",Paths.get("./target/work"), hubClient, "1be62e64-e5b6-457b-b0cd-9fb5b16cade4", "test").start();
+        new HubLdap("hub.local", Paths.get("./target/work"), hubClient, "1be62e64-e5b6-457b-b0cd-9fb5b16cade4", "test").start();
     }
 }

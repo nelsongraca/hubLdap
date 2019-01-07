@@ -1,11 +1,6 @@
 package com.flowkode.hubldap;
 
 import com.flowkode.hubldap.data.*;
-import org.apache.directory.api.ldap.model.entry.DefaultEntry;
-import org.apache.directory.api.ldap.model.exception.LdapException;
-import org.apache.directory.api.ldap.model.name.Dn;
-import org.apache.directory.api.ldap.model.schema.SchemaManager;
-import org.apache.directory.server.core.api.DirectoryService;
 import retrofit2.Response;
 
 import java.io.IOException;
@@ -17,28 +12,25 @@ public class HubDataSynchronizer {
 
     private static final int CHUNK_SIZE = 10;
 
-    private final String serviceId;
-
-    private final String serviceSecret;
-
     private final HubClient hubClient;
 
     private final HashMap<String, String> groups = new HashMap<>();
 
     private final Directory directory;
 
+    private final String credentials;
+
     public HubDataSynchronizer(Directory directory, HubClient hubClient, String serviceId, String serviceSecret) {
-        this.directory= directory;
-        this.serviceId = serviceId;
-        this.serviceSecret = serviceSecret;
+        this.directory = directory;
         this.hubClient = hubClient;
 
+        credentials = "Basic " + Base64.getEncoder().encodeToString((serviceId + ":" + serviceSecret).getBytes());
     }
 
     public void sync() {
         try {
-            String credentials = Base64.getEncoder().encodeToString((serviceId + ":" + serviceSecret).getBytes());
-            final Response<AuthResponse> response = hubClient.serviceLogin("Basic " + credentials).execute();
+
+            final Response<AuthResponse> response = hubClient.serviceLogin(credentials).execute();
             String token = response.body().getAccessToken();
             loadUserGroups(token);
             loadUsers(token);
@@ -101,18 +93,16 @@ public class HubDataSynchronizer {
                 final String groupCn = "cn=" + userGroup.getName() + ",ou=Groups," + directory.getDcDn();
                 this.groups.put(userGroup.getId(), groupCn);
                 directory.addStaticData(groupCn,
-                              "objectClass:top",
-                              "objectClass:groupOfNames",
-                              "member: ",
-                              "cn:" + userGroup.getName(),
-                              "description:" + userGroup.getId()
+                                        "objectClass:top",
+                                        "objectClass:groupOfNames",
+                                        "member: ",
+                                        "cn:" + userGroup.getName(),
+                                        "description:" + userGroup.getId()
                 );
                 System.out.println("Group: " + userGroup.getName());
             }
         }
     }
-
-
 
 
 }
