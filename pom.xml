@@ -53,43 +53,43 @@
         <dependency>
             <groupId>org.apache.directory.server</groupId>
             <artifactId>apacheds-core-annotations</artifactId>
-              <version>${version.apacheds}</version>
+            <version>${version.apacheds}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.directory.server</groupId>
             <artifactId>apacheds-core-api</artifactId>
-              <version>${version.apacheds}</version>
+            <version>${version.apacheds}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.directory.server</groupId>
             <artifactId>apacheds-service-builder</artifactId>
-              <version>${version.apacheds}</version>
+            <version>${version.apacheds}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.directory.api</groupId>
             <artifactId>api-ldap-codec-standalone</artifactId>
-              <version>${version.apacheds-api}</version>
+            <version>${version.apacheds-api}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.directory.api</groupId>
             <artifactId>api-ldap-model</artifactId>
-              <version>${version.apacheds-api}</version>
+            <version>${version.apacheds-api}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.directory.api</groupId>
             <artifactId>api-ldap-schema-data</artifactId>
-              <version>${version.apacheds-api}</version>
+            <version>${version.apacheds-api}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.directory.api</groupId>
             <artifactId>api-util</artifactId>
-              <version>${version.apacheds-api}</version>
+            <version>${version.apacheds-api}</version>
         </dependency>
 
     </dependencies>
@@ -108,6 +108,16 @@
                             <mainClass>com.flowkode.hubldap.Main</mainClass>
                         </transformer>
                     </transformers>
+                    <filters>
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
                 </configuration>
                 <executions>
                     <execution>

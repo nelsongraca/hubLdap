@@ -4,6 +4,7 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 import java.io.FileReader;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
@@ -19,9 +20,15 @@ public class Main {
         HubClient hubClient = retrofit.create(HubClient.class);
 
         Properties config = new Properties();
-        config.load(new FileReader(Paths.get(".").toAbsolutePath().normalize().resolve("hubLdap.properties").toFile()));
+        Path jarDir = Paths.get(Main.class.getProtectionDomain().getCodeSource().getLocation().toURI());
 
-        final Path workDir = Paths.get("./work");
+        if (!Files.isDirectory(jarDir)) {
+            jarDir = jarDir.getParent();
+        }
+        System.out.println(jarDir);
+        config.load(new FileReader(jarDir.toAbsolutePath().normalize().resolve("hubLdap.properties").toFile()));
+
+        final Path workDir = jarDir.resolve("work");
         final String rootDomain = config.getProperty("rootDomain", "hub.local");
         final String adminPassword = config.getProperty("adminPassword", "admin");
         final String serviceId = config.getProperty("serviceId", "");
