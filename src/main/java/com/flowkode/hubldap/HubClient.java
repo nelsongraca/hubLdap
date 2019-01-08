@@ -1,6 +1,7 @@
 package com.flowkode.hubldap;
 
 import com.flowkode.hubldap.data.AuthResponse;
+import com.flowkode.hubldap.data.User;
 import com.flowkode.hubldap.data.UserGroupsResponse;
 import com.flowkode.hubldap.data.UsersResponse;
 import retrofit2.Call;
@@ -21,6 +22,9 @@ public interface HubClient {
     @POST("oauth2/token")
     @FormUrlEncoded
     Call<AuthResponse> serviceLogin(@Header("Authorization") String credentials, @Field("scope") String scope, @Field("grant_type") String grantType);
+
+    @GET("users/{userId}")
+    Call<User> getUser(@Header("Authorization") String credentials, @Path("userId") String userId);
 
     default Call<AuthResponse> userLogin(String authorization, String username, String password) {
         return userLogin(authorization, "0-0-0-0-0", "password", username, password);

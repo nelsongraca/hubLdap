@@ -1,6 +1,13 @@
 package com.flowkode.hubldap;
 
 import com.flowkode.hubldap.data.*;
+import org.apache.directory.api.ldap.model.cursor.Cursor;
+import org.apache.directory.api.ldap.model.cursor.CursorException;
+import org.apache.directory.api.ldap.model.entry.Entry;
+import org.apache.directory.api.ldap.model.exception.LdapException;
+import org.apache.directory.api.ldap.model.filter.EqualityNode;
+import org.apache.directory.api.ldap.model.message.AliasDerefMode;
+import org.apache.directory.api.ldap.model.message.SearchScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import retrofit2.Response;
@@ -72,6 +79,22 @@ public class HubDataSynchronizer {
                 addUser(user);
             }
         }
+
+        //purge users that do not exist anymore
+        try {
+            final Cursor<Entry> search = directory.getAdminSession().search(directory.getRootDn(), SearchScope.SUBTREE, new EqualityNode<String>("objectClass", "person"), AliasDerefMode.DEREF_ALWAYS);
+            while (search.next()) {
+                final Entry entry = search.get();
+                final String userId = entry.get("description").getString();
+                final Response<User> response = hubClient.getUser("Bearer " + authToken, userId).execute();
+                if (response.raw().code() == 404 || (response.isSuccessful() && !response.body().getId().equals(userId))) {
+                    directory.getAdminSession().delete(entry.getDn());
+                }
+            }
+        }
+        catch (CursorException | LdapException e) {
+            LOGGER.error(e.getMessage(), e);
+        }
     }
 
     private void addUser(User user) {
@@ -86,16 +109,18 @@ public class HubDataSynchronizer {
         attributes.add("objectClass:organizationalPerson");
         attributes.add("objectClass:person");
         attributes.add("objectClass:microsoftPrincipal");
+        attributes.add("description:" + user.getId());
         attributes.add("cn:" + user.getName());
         attributes.add("sn: ");
         attributes.add("mail:" + Optional.of(user.getProfile()).map(Profile::getEmail).map(Email::getEmail).orElse(""));
         attributes.add("uid:" + user.getLogin());
-        directory.addStaticData("cn=" + user.getName() + ",ou=Users," + directory.getDcDn(), attributes.toArray(new String[0]));
+        directory.addStaticData("cn=" + user.getName() + ",ou=Users," + directory.getRootDn().getName(), attributes.toArray(new String[0]));
 
         LOGGER.debug("Found user: {}", user.getName());
     }
 
     private void loadUserGroups(String authToken) throws IOException {
+        this.groups.clear();
         int total = Integer.MAX_VALUE;
 
         int start = 0;
@@ -107,7 +132,7 @@ public class HubDataSynchronizer {
             total = body.getTotal();
 
             for (UserGroup userGroup : body.getUserGroups()) {
-                final String groupCn = "cn=" + userGroup.getName() + ",ou=Groups," + directory.getDcDn();
+                final String groupCn = "cn=" + userGroup.getName() + ",ou=Groups," + directory.getRootDn().getName();
                 this.groups.put(userGroup.getId(), groupCn);
                 directory.addStaticData(groupCn,
                                         "objectClass:top",
@@ -118,6 +143,19 @@ public class HubDataSynchronizer {
                 );
                 LOGGER.debug("Found group: {}", userGroup.getName());
             }
+        }
+        //purge groups that do not exist anymore
+        try {
+            final Cursor<Entry> search = directory.getAdminSession().search(directory.getRootDn(), SearchScope.SUBTREE, new EqualityNode<String>("objectClass", "groupOfNames"), AliasDerefMode.DEREF_ALWAYS);
+            while (search.next()) {
+                final Entry entry = search.get();
+                if (!groups.containsKey(entry.get("description").getString())) {
+                    directory.getAdminSession().delete(entry.getDn());
+                }
+            }
+        }
+        catch (CursorException | LdapException e) {
+            LOGGER.error(e.getMessage(), e);
         }
     }
 }

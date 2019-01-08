@@ -1,10 +1,15 @@
 package com.flowkode.hubldap;
 
 
+import org.apache.directory.api.ldap.model.cursor.Cursor;
+import org.apache.directory.api.ldap.model.cursor.CursorException;
 import org.apache.directory.api.ldap.model.entry.DefaultEntry;
 import org.apache.directory.api.ldap.model.entry.DefaultModification;
+import org.apache.directory.api.ldap.model.entry.Entry;
 import org.apache.directory.api.ldap.model.entry.ModificationOperation;
 import org.apache.directory.api.ldap.model.exception.LdapException;
+import org.apache.directory.api.ldap.model.exception.LdapInvalidDnException;
+import org.apache.directory.api.ldap.model.exception.LdapNoSuchObjectException;
 import org.apache.directory.api.ldap.model.name.Dn;
 import org.apache.directory.api.ldap.model.schema.SchemaManager;
 import org.apache.directory.api.ldap.model.schema.registries.SchemaLoader;
@@ -17,10 +22,7 @@ import org.apache.directory.api.util.IOUtils;
 import org.apache.directory.api.util.exception.Exceptions;
 import org.apache.directory.server.constants.ServerDNConstants;
 import org.apache.directory.server.core.DefaultDirectoryService;
-import org.apache.directory.server.core.api.CacheService;
-import org.apache.directory.server.core.api.DirectoryService;
-import org.apache.directory.server.core.api.DnFactory;
-import org.apache.directory.server.core.api.InstanceLayout;
+import org.apache.directory.server.core.api.*;
 import org.apache.directory.server.core.api.schema.SchemaPartition;
 import org.apache.directory.server.core.authn.AuthenticationInterceptor;
 import org.apache.directory.server.core.authn.Authenticator;
@@ -83,16 +85,38 @@ public class HubLdap {
         @Override
         public void addStaticData(String dnStr, String... attrs) {
             try {
-                directoryService.getAdminSession().add(new DefaultEntry(schemaManager, dnFactory.create(dnStr), attrs));
+                //search
+                final Dn dn = dnFactory.create(dnStr);
+                try {
+                    final Cursor<Entry> search = directoryService.getAdminSession().search(dn, "(objectClass=*)");
+                    //if it has next exists so we need to delete so we can add again
+                    if (search.next()) {
+                        directoryService.getAdminSession().delete(dn);
+                    }
+                }
+                catch (LdapNoSuchObjectException ignored) {
+                }
+                directoryService.getAdminSession().add(new DefaultEntry(schemaManager, dn, attrs));
             }
-            catch (LdapException e) {
+            catch (CursorException | LdapException e) {
                 throw new RuntimeException(e);
             }
         }
 
         @Override
-        public String getDcDn() {
-            return dcDn;
+        public Dn getRootDn() {
+            try {
+                return dnFactory.create(dcDn);
+            }
+            catch (LdapInvalidDnException e) {
+                LOGGER.error(e.getMessage(), e);
+            }
+            return null;
+        }
+
+        @Override
+        public CoreSession getAdminSession() {
+            return directoryService.getAdminSession();
         }
     };
 
