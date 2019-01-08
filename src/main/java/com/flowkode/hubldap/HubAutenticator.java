@@ -3,6 +3,7 @@ package com.flowkode.hubldap;
 import com.flowkode.hubldap.data.AuthResponse;
 import org.apache.directory.api.ldap.model.constants.AuthenticationLevel;
 import org.apache.directory.api.ldap.model.exception.LdapException;
+import org.apache.directory.api.ldap.model.name.Dn;
 import org.apache.directory.server.core.api.LdapPrincipal;
 import org.apache.directory.server.core.api.interceptor.context.BindOperationContext;
 import org.apache.directory.server.core.authn.AbstractAuthenticator;
@@ -18,8 +19,8 @@ public class HubAutenticator extends AbstractAuthenticator {
 
     private final String credentials;
 
-    public HubAutenticator(HubClient hubClient, String serviceId, String serviceSecret) {
-        super(AuthenticationLevel.SIMPLE);
+    public HubAutenticator(Dn rootDn, HubClient hubClient, String serviceId, String serviceSecret) {
+        super(AuthenticationLevel.SIMPLE, rootDn);
         this.hubClient = hubClient;
         credentials = "Basic " + Base64.getEncoder().encodeToString((serviceId + ":" + serviceSecret).getBytes());
     }

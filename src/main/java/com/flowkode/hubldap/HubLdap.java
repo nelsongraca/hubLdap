@@ -1,13 +1,11 @@
 package com.flowkode.hubldap;
 
 
-import org.apache.directory.api.ldap.model.constants.AuthenticationLevel;
 import org.apache.directory.api.ldap.model.entry.DefaultEntry;
 import org.apache.directory.api.ldap.model.entry.DefaultModification;
 import org.apache.directory.api.ldap.model.entry.ModificationOperation;
 import org.apache.directory.api.ldap.model.exception.LdapException;
 import org.apache.directory.api.ldap.model.name.Dn;
-import org.apache.directory.api.ldap.model.name.Rdn;
 import org.apache.directory.api.ldap.model.schema.SchemaManager;
 import org.apache.directory.api.ldap.model.schema.registries.SchemaLoader;
 import org.apache.directory.api.ldap.schema.extractor.SchemaLdifExtractor;
@@ -49,16 +47,23 @@ public class HubLdap {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HubLdap.class);
 
-
     private final InstanceLayout instanceLayout;
 
-    private final String dcDn;
+    private final String serviceId;
 
-    private final HubDataSynchronizer dataSynchronizer;
+    private final String serviceSecret;
 
     private final HubClient hubClient;
 
-    private final HubAutenticator hubAutenticator;
+    private final String adminPassword;
+
+    private final String rootDomain;
+
+    private String dcDn;
+
+    private HubDataSynchronizer dataSynchronizer;
+
+    private HubAutenticator hubAutenticator;
 
     private int serverPort = 10389;
 
@@ -78,7 +83,7 @@ public class HubLdap {
         @Override
         public void addStaticData(String dnStr, String... attrs) {
             try {
-                directoryService.getAdminSession().add(new DefaultEntry(schemaManager, new Dn(dnStr), attrs));
+                directoryService.getAdminSession().add(new DefaultEntry(schemaManager, dnFactory.create(dnStr), attrs));
             }
             catch (LdapException e) {
                 throw new RuntimeException(e);
@@ -91,14 +96,12 @@ public class HubLdap {
         }
     };
 
-    private String adminPassword = "test";
-
-    public HubLdap(String rootDomain, Path workDir, HubClient hubClient, String serviceId, String serviceSecret) throws Exception {
+    public HubLdap(String rootDomain, String adminPassword, Path workDir, HubClient hubClient, String serviceId, String serviceSecret) throws Exception {
+        this.adminPassword = adminPassword;
+        this.rootDomain = rootDomain;
+        this.serviceId = serviceId;
+        this.serviceSecret = serviceSecret;
         this.hubClient = hubClient;
-        hubAutenticator = new HubAutenticator(hubClient, serviceId, serviceSecret);
-
-        dataSynchronizer = new HubDataSynchronizer(directory, hubClient, serviceId, serviceSecret);
-        dcDn = "dc=" + Arrays.stream(rootDomain.split("\\.")).collect(Collectors.joining(",dc="));
 
         final File normalizedWorkDir = workDir.toAbsolutePath().normalize().toFile();
         FileUtils.deleteDirectory(normalizedWorkDir);
@@ -131,7 +134,7 @@ public class HubLdap {
     private JdbmPartition createSystemPartition() throws LdapException {
         final JdbmPartition systemPartition = new JdbmPartition(schemaManager, dnFactory);
         systemPartition.setId("system");
-        systemPartition.setSuffixDn(new Dn(new Rdn(ServerDNConstants.SYSTEM_DN)));
+        systemPartition.setSuffixDn(dnFactory.create(ServerDNConstants.SYSTEM_DN));
         systemPartition.setPartitionPath(instanceLayout.getPartitionsDirectory().toPath().resolve("system").toUri());
         return systemPartition;
     }
@@ -178,6 +181,12 @@ public class HubLdap {
 
         dnFactory = new DefaultDnFactory(schemaManager, cacheService.getCache("dnCache"));
 
+        dcDn = "dc=" + Arrays.stream(rootDomain.split("\\.")).collect(Collectors.joining(",dc="));
+
+        dataSynchronizer = new HubDataSynchronizer(directory, hubClient, serviceId, serviceSecret);
+        hubAutenticator = new HubAutenticator(dnFactory.create(dcDn), hubClient, serviceId, serviceSecret);
+
+
         schemaLdifPartition = new LdifPartition(schemaManager, dnFactory);
         schemaLdifPartition.setPartitionPath(schemaPath.toUri());
 
@@ -189,8 +198,6 @@ public class HubLdap {
         );
         addHubPartition();
         buildLdapServer();
-
-
     }
 
     private void addHubPartition() throws LdapException {
@@ -200,7 +207,7 @@ public class HubLdap {
                 directoryService,
                 instanceLayout.getPartitionsDirectory().toPath().resolve("hub").toUri()
         );
-        Dn suffixDn = new Dn(schemaManager, dcDn);
+        Dn suffixDn = dnFactory.create(dcDn);
         hubPartition.setSuffixDn(suffixDn);
 
         directoryService.addPartition(hubPartition);
@@ -208,7 +215,6 @@ public class HubLdap {
 
         final AuthenticationInterceptor authenticationInterceptor = (AuthenticationInterceptor) directoryService.getInterceptor("authenticationInterceptor");
         final Set<Authenticator> authenticators = authenticationInterceptor.getAuthenticators();
-        authenticators.removeIf(a -> a.getAuthenticatorType().equals(AuthenticationLevel.SIMPLE));
         authenticators.add(hubAutenticator);
         authenticationInterceptor.setAuthenticators(authenticators.toArray(new Authenticator[0])); //must use this one, read the sources if you want to know why
     }
@@ -223,7 +229,6 @@ public class HubLdap {
 
     public void start() throws Exception {
         ldapServer.start();
-        dataSynchronizer.sync();
+        dataSynchronizer.startSync();
     }
-
 }

@@ -1,14 +1,20 @@
 package com.flowkode.hubldap;
 
 import com.flowkode.hubldap.data.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import retrofit2.Response;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class HubDataSynchronizer {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(HubDataSynchronizer.class);
 
     private static final int CHUNK_SIZE = 10;
 
@@ -20,6 +26,8 @@ public class HubDataSynchronizer {
 
     private final String credentials;
 
+    private ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+
     public HubDataSynchronizer(Directory directory, HubClient hubClient, String serviceId, String serviceSecret) {
         this.directory = directory;
         this.hubClient = hubClient;
@@ -27,16 +35,25 @@ public class HubDataSynchronizer {
         credentials = "Basic " + Base64.getEncoder().encodeToString((serviceId + ":" + serviceSecret).getBytes());
     }
 
-    public void sync() {
-        try {
+    public void startSync() {
+        sync();
+        scheduler.scheduleWithFixedDelay(this::sync, 1, 1, TimeUnit.MINUTES);
+    }
 
+    private void sync() {
+        try {
             final Response<AuthResponse> response = hubClient.serviceLogin(credentials).execute();
-            String token = response.body().getAccessToken();
-            loadUserGroups(token);
-            loadUsers(token);
+            if (response.isSuccessful()) {
+                String token = response.body().getAccessToken();
+                loadUserGroups(token);
+                loadUsers(token);
+            }
+            else {
+                LOGGER.error("Failed to sync got code {} when logging in.", response.code());
+            }
         }
-        catch (IOException e) {
-            e.printStackTrace();
+        catch (Exception e) {
+            LOGGER.error("Could not sync.", e);
         }
     }
 
@@ -75,7 +92,7 @@ public class HubDataSynchronizer {
         attributes.add("uid:" + user.getLogin());
         directory.addStaticData("cn=" + user.getName() + ",ou=Users," + directory.getDcDn(), attributes.toArray(new String[0]));
 
-        System.out.println("User:" + user.getName());
+        LOGGER.debug("Found user: {}", user.getName());
     }
 
     private void loadUserGroups(String authToken) throws IOException {
@@ -99,10 +116,8 @@ public class HubDataSynchronizer {
                                         "cn:" + userGroup.getName(),
                                         "description:" + userGroup.getId()
                 );
-                System.out.println("Group: " + userGroup.getName());
+                LOGGER.debug("Found group: {}", userGroup.getName());
             }
         }
     }
-
-
 }

@@ -25,7 +25,7 @@ public class HubPartition extends JdbmPartition {
 
     private void addStaticData(String dnStr, String... attrs) {
         try {
-            directoryService.getAdminSession().add(new DefaultEntry(schemaManager, new Dn(dnStr), attrs));
+            directoryService.getAdminSession().add(new DefaultEntry(schemaManager, dnFactory.create(dnStr), attrs));
         }
         catch (LdapException e) {
             throw new RuntimeException(e);

@@ -3,7 +3,10 @@ package com.flowkode.hubldap;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
+import java.io.FileReader;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Properties;
 
 public class Main {
 
@@ -14,6 +17,16 @@ public class Main {
                 .build();
 
         HubClient hubClient = retrofit.create(HubClient.class);
-        new HubLdap("hub.local", Paths.get("./target/work"), hubClient, "1be62e64-e5b6-457b-b0cd-9fb5b16cade4", "test").start();
+
+        Properties config = new Properties();
+        config.load(new FileReader(Paths.get(".").toAbsolutePath().normalize().resolve("hubLdap.properties").toFile()));
+
+        final Path workDir = Paths.get("./work");
+        final String rootDomain = config.getProperty("rootDomain", "hub.local");
+        final String adminPassword = config.getProperty("adminPassword", "admin");
+        final String serviceId = config.getProperty("serviceId", "");
+        final String serviceSecret = config.getProperty("serviceSecret", "");
+
+        new HubLdap(rootDomain, adminPassword, workDir, hubClient, serviceId, serviceSecret).start();
     }
 }
