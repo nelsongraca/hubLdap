@@ -3,4 +3,5 @@
 *.iml
 target
 work
+hubLdap.properties
 dependency-reduced-pom.xml
