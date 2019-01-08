@@ -8,6 +8,7 @@ Admin bindDn is `uid=admin,ou=system`
 
 Create `hubLdap.properties` in the same directory as the jar
 
+    hubUrl=http://localhost:8080/hub
     rootDomain=hub.local
     adminPassword=test
     serviceId=1be62e64-e5b6-457b-b0cd-9fb5b16cade4
