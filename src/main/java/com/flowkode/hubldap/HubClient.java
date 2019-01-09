@@ -26,6 +26,9 @@ public interface HubClient {
     @GET("users/{userId}")
     Call<User> getUser(@Header("Authorization") String credentials, @Path("userId") String userId);
 
+    @GET("usergroups/{groupId}")
+    Call<User> getUserGroup(@Header("Authorization") String credentials, @Path("groupId") String groupId);
+
     default Call<AuthResponse> userLogin(String authorization, String username, String password) {
         return userLogin(authorization, "0-0-0-0-0", "password", username, password);
     }

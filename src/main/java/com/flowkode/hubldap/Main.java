@@ -20,7 +20,6 @@ public class Main {
         if (!Files.isDirectory(jarDir)) {
             jarDir = jarDir.getParent();
         }
-        System.out.println(jarDir);
         config.load(new FileReader(jarDir.toAbsolutePath().normalize().resolve("hubLdap.properties").toFile()));
 
         final Path workDir = jarDir.resolve("work");

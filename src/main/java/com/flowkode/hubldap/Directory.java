@@ -1,13 +1,23 @@
 package com.flowkode.hubldap;
 
+import org.apache.directory.api.ldap.model.cursor.Cursor;
+import org.apache.directory.api.ldap.model.entry.Entry;
+import org.apache.directory.api.ldap.model.filter.ExprNode;
 import org.apache.directory.api.ldap.model.name.Dn;
-import org.apache.directory.server.core.api.CoreSession;
+
+import java.util.Set;
 
 public interface Directory {
 
-    void addStaticData(String dnStr, String... attrs);
+    Cursor<Entry> search(ExprNode node);
 
-    Dn getRootDn();
+    void delete(Dn dn);
 
-    CoreSession getAdminSession();
+    void addUser(String name, String id, String mail, String login, Set<String> groups);
+
+    Cursor<Entry> findAllUsers();
+
+    Cursor<Entry> findAllGroups();
+
+    void addGroup(String name, String id);
 }

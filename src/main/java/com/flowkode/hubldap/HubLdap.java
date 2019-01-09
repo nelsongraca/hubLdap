@@ -8,8 +8,12 @@ import org.apache.directory.api.ldap.model.entry.DefaultModification;
 import org.apache.directory.api.ldap.model.entry.Entry;
 import org.apache.directory.api.ldap.model.entry.ModificationOperation;
 import org.apache.directory.api.ldap.model.exception.LdapException;
-import org.apache.directory.api.ldap.model.exception.LdapInvalidDnException;
 import org.apache.directory.api.ldap.model.exception.LdapNoSuchObjectException;
+import org.apache.directory.api.ldap.model.filter.AndNode;
+import org.apache.directory.api.ldap.model.filter.EqualityNode;
+import org.apache.directory.api.ldap.model.filter.ExprNode;
+import org.apache.directory.api.ldap.model.message.AliasDerefMode;
+import org.apache.directory.api.ldap.model.message.SearchScope;
 import org.apache.directory.api.ldap.model.name.Dn;
 import org.apache.directory.api.ldap.model.schema.SchemaManager;
 import org.apache.directory.api.ldap.model.schema.registries.SchemaLoader;
@@ -22,7 +26,10 @@ import org.apache.directory.api.util.IOUtils;
 import org.apache.directory.api.util.exception.Exceptions;
 import org.apache.directory.server.constants.ServerDNConstants;
 import org.apache.directory.server.core.DefaultDirectoryService;
-import org.apache.directory.server.core.api.*;
+import org.apache.directory.server.core.api.CacheService;
+import org.apache.directory.server.core.api.DirectoryService;
+import org.apache.directory.server.core.api.DnFactory;
+import org.apache.directory.server.core.api.InstanceLayout;
 import org.apache.directory.server.core.api.schema.SchemaPartition;
 import org.apache.directory.server.core.authn.AuthenticationInterceptor;
 import org.apache.directory.server.core.authn.Authenticator;
@@ -37,12 +44,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class HubLdap {
@@ -60,6 +66,8 @@ public class HubLdap {
     private final String adminPassword;
 
     private final String rootDomain;
+
+    private final Directory directory = new DirectoryImpl();
 
     private String dcDn;
 
@@ -81,45 +89,6 @@ public class HubLdap {
 
     private DirectoryService directoryService;
 
-    private final Directory directory = new Directory() {
-        @Override
-        public void addStaticData(String dnStr, String... attrs) {
-            try {
-                //search
-                final Dn dn = dnFactory.create(dnStr);
-                try {
-                    final Cursor<Entry> search = directoryService.getAdminSession().search(dn, "(objectClass=*)");
-                    //if it has next exists so we need to delete so we can add again
-                    if (search.next()) {
-                        directoryService.getAdminSession().delete(dn);
-                    }
-                }
-                catch (LdapNoSuchObjectException ignored) {
-                }
-                directoryService.getAdminSession().add(new DefaultEntry(schemaManager, dn, attrs));
-            }
-            catch (CursorException | LdapException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        @Override
-        public Dn getRootDn() {
-            try {
-                return dnFactory.create(dcDn);
-            }
-            catch (LdapInvalidDnException e) {
-                LOGGER.error(e.getMessage(), e);
-            }
-            return null;
-        }
-
-        @Override
-        public CoreSession getAdminSession() {
-            return directoryService.getAdminSession();
-        }
-    };
-
     public HubLdap(String rootDomain, String adminPassword, Path workDir, HubClient hubClient, String serviceId, String serviceSecret) throws Exception {
         this.adminPassword = adminPassword;
         this.rootDomain = rootDomain;
@@ -132,6 +101,25 @@ public class HubLdap {
         instanceLayout = new InstanceLayout(normalizedWorkDir);
 
         configure();
+    }
+
+    public void addStaticData(String dnStr, String... attrs) {
+        try {
+            //search
+            final Dn dn = dnFactory.create(dnStr);
+            try (final Cursor<Entry> search = directoryService.getAdminSession().search(dn, "(objectClass=*)")) {
+                //if it has next exists so we need to delete so we can add again
+                if (search.next()) {
+                    directoryService.getAdminSession().delete(dn);
+                }
+            }
+            catch (IOException | LdapNoSuchObjectException ignored) {
+            }
+            directoryService.getAdminSession().add(new DefaultEntry(schemaManager, dn, attrs));
+        }
+        catch (CursorException | LdapException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void initDirectoryService() throws Exception {
@@ -254,5 +242,112 @@ public class HubLdap {
     public void start() throws Exception {
         ldapServer.start();
         dataSynchronizer.startSync();
+    }
+
+    private class DirectoryImpl implements Directory {
+
+        @Override
+        public void delete(Dn dn) {
+            try {
+                directoryService.getAdminSession().delete(dn);
+            }
+            catch (LdapException e) {
+                LOGGER.error("Failed to delete: " + dn, e);
+            }
+        }
+
+        private Cursor<Entry> search(Dn baseDn, ExprNode node) {
+            try {
+                return directoryService.getAdminSession().search(baseDn, SearchScope.SUBTREE, node, AliasDerefMode.DEREF_ALWAYS);
+            }
+            catch (LdapException e) {
+                LOGGER.error("Error searching", e);
+                return null;
+            }
+        }
+
+        @Override
+        public Cursor<Entry> search(ExprNode node) {
+            try {
+                return directoryService.getAdminSession().search(dnFactory.create(dcDn), SearchScope.SUBTREE, node, AliasDerefMode.DEREF_ALWAYS);
+            }
+            catch (LdapException e) {
+                LOGGER.error("Error searching", e);
+                return null;
+            }
+        }
+
+        private Dn findGroup(String groupId) {
+            try (final Cursor<Entry> search = search(dnFactory.create(dcDn), new AndNode(
+                    new EqualityNode<String>("objectClass", "groupOfNames"),
+                    new EqualityNode<String>("description", groupId)
+            ))) {
+                if (search != null && search.next()) {
+                    return search.get().getDn();
+                }
+            }
+            catch (IOException | LdapException | CursorException e) {
+                LOGGER.error("Could not find group with id: " + groupId, e);
+            }
+            return null;
+        }
+
+        @Override
+        public Cursor<Entry> findAllUsers() {
+            return search(new EqualityNode<String>("objectClass", "person"));
+        }
+
+        @Override
+        public Cursor<Entry> findAllGroups() {
+            return search(new EqualityNode<String>("objectClass", "groupOfNames"));
+        }
+
+        @Override
+        public void addGroup(String name, String id) {
+            final Set<String> attributes = new HashSet<>();
+            attributes.add("objectClass:top");
+            attributes.add("objectClass:groupOfNames");
+            attributes.add("member: ");
+            attributes.add("cn:" + name);
+            attributes.add("description:" + id);
+            addStaticData("cn=" + name + ",ou=Groups," + dcDn, attributes.toArray(new String[0]));
+        }
+
+        @Override
+        public void addUser(String name, String id, String mail, String login, Set<String> groups) {
+            final String userDn = "cn=" + name + ",ou=Users," + dcDn;
+
+            final Set<String> attributes = groups.stream()
+                                                 .map(this::findGroup)
+                                                 .filter(Objects::nonNull)
+                                                 .map(g -> "memberOf:" + g)
+                                                 .collect(Collectors.toSet());
+
+            attributes.add("objectClass:top");
+            attributes.add("objectClass:inetOrgPerson");
+            attributes.add("objectClass:organizationalPerson");
+            attributes.add("objectClass:person");
+            attributes.add("objectClass:microsoftPrincipal");
+            attributes.add("description:" + id);
+            attributes.add("cn:" + name);
+            attributes.add("sn: ");
+            attributes.add("mail:" + mail);
+            attributes.add("uid:" + login);
+            addStaticData(userDn, attributes.toArray(new String[0]));
+
+            //now add him as member on the groups
+            for (String group : groups) {
+                final Dn groupDn = findGroup(group);
+                if (groupDn != null) {
+                    try {
+                        final DefaultModification defaultModification = new DefaultModification(ModificationOperation.ADD_ATTRIBUTE, "member", userDn);
+                        directoryService.getAdminSession().modify(groupDn, defaultModification);
+                    }
+                    catch (LdapException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
     }
 }
