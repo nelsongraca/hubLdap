@@ -196,7 +196,7 @@ public class HubLdap {
         dcDn = "dc=" + Arrays.stream(rootDomain.split("\\.")).collect(Collectors.joining(",dc="));
 
         dataSynchronizer = new HubDataSynchronizer(directory, hubClient, serviceId, serviceSecret);
-        hubAutenticator = new HubAutenticator(dnFactory.create(dcDn), hubClient, serviceId, serviceSecret);
+        hubAutenticator = new HubAutenticator(dnFactory.create(dcDn), directory, hubClient, serviceId, serviceSecret);
 
 
         schemaLdifPartition = new LdifPartition(schemaManager, dnFactory);
@@ -348,6 +348,19 @@ public class HubLdap {
                     }
                 }
             }
+        }
+
+        @Override
+        public String getUsername(Dn dn) {
+            try (final Cursor<Entry> search = search(dn, new EqualityNode<String>("objectClass", "person"))) {
+                if (search != null && search.next()) {
+                    return search.get().get("uid").getString();
+                }
+            }
+            catch (IOException | LdapException | CursorException e) {
+                LOGGER.error("Could not find user with cn: " + dn.toString(), e);
+            }
+            return null;
         }
     }
 }

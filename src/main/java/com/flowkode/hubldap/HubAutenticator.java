@@ -19,16 +19,19 @@ public class HubAutenticator extends AbstractAuthenticator {
 
     private final String credentials;
 
-    public HubAutenticator(Dn rootDn, HubClient hubClient, String serviceId, String serviceSecret) {
+    private final Directory directory;
+
+    public HubAutenticator(Dn rootDn, Directory directory, HubClient hubClient, String serviceId, String serviceSecret) {
         super(AuthenticationLevel.SIMPLE, rootDn);
         this.hubClient = hubClient;
+        this.directory = directory;
         credentials = "Basic " + Base64.getEncoder().encodeToString((serviceId + ":" + serviceSecret).getBytes());
     }
 
     @Override
     public LdapPrincipal authenticate(BindOperationContext bindOperationContext) throws LdapException {
         try {
-            String username = bindOperationContext.getDn().getRdn(0).getValue();
+            String username = directory.getUsername(bindOperationContext.getDn());
             String password = new String(bindOperationContext.getCredentials(), StandardCharsets.UTF_8);
 
             Response<AuthResponse> u = hubClient.userLogin(credentials, username, password).execute();

@@ -49,8 +49,11 @@ public class HubDataSynchronizer {
             if (response.isSuccessful()) {
                 String token = "Bearer " + response.body().getAccessToken();
                 loadUserGroups(token);
+                Thread.sleep(500);
                 loadUsers(token);
+                Thread.sleep(500);
                 purgeUsers(token);
+                Thread.sleep(500);
                 purgeGroups(token);
             }
             else {

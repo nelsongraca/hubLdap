@@ -20,4 +20,6 @@ public interface Directory {
     Cursor<Entry> findAllGroups();
 
     void addGroup(String name, String id);
+
+    String getUsername(Dn dn);
 }
