@@ -163,23 +163,12 @@ public class HubLdap {
         SchemaLdifExtractor extractor = new DefaultSchemaLdifExtractor(instanceLayout.getPartitionsDirectory());
         extractor.extractOrCopy();
 
-        Path attributeTypesDir = schemaPath.resolve("ou=schema/cn=other/ou=attributetypes");
-        Files.createDirectories(attributeTypesDir);
-        try (
-                InputStream ldif = getClass().getClassLoader().getResourceAsStream("memberof.ldif");
-                FileOutputStream target = new FileOutputStream(attributeTypesDir.resolve("m-oid=1.2.840.113556.1.4.222.ldif").toFile())
-        ) {
-            IOUtils.copy(ldif, target);
-        }
+        copyLdif(schemaPath.resolve("ou=schema/cn=other/ou=attributetypes"), "memberOf.ldif", "m-oid=1.2.840.113556.1.4.222.ldif");
+        copyLdif(schemaPath.resolve("ou=schema/cn=other/ou=objectclasses"), "msPrincipal.ldif", "m-oid=1.2.840.113556.1.5.6.ldif");
 
-        Path objectClassesDir = schemaPath.resolve("ou=schema/cn=other/ou=objectclasses");
-        Files.createDirectories(objectClassesDir);
-        try (
-                InputStream ldif = getClass().getClassLoader().getResourceAsStream("msprincipal.ldif");
-                FileOutputStream target = new FileOutputStream(objectClassesDir.resolve("m-oid=1.2.840.113556.1.5.6.ldif").toFile())
-        ) {
-            IOUtils.copy(ldif, target);
-        }
+        copyLdif(schemaPath.resolve("ou=schema/cn=other/ou=attributetypes"), "sshPublicKey.ldif", "m-oid=1.3.6.1.4.1.24552.500.1.1.1.13.ldif");
+        copyLdif(schemaPath.resolve("ou=schema/cn=other/ou=objectclasses"), "ldapPublicKey.ldif", "m-oid=1.3.6.1.4.1.24552.500.1.1.2.0.ldif");
+
 
         SchemaLoader loader = new LdifSchemaLoader(schemaPath.toFile());
         schemaManager = new DefaultSchemaManager(loader.getAllSchemas());
@@ -204,12 +193,30 @@ public class HubLdap {
 
 
         initDirectoryService();
+        //change admin password
         directoryService.getAdminSession().modify(
                 new Dn("uid=admin,ou=system"),
                 new DefaultModification(ModificationOperation.REPLACE_ATTRIBUTE, "userPassword", adminPassword)
         );
+        // TODO: 2/5/19 future reference (ngraca)
+        //enable posix account stuff
+//        directoryService.getAdminSession().modify(
+//                new Dn("cn=nis,ou=schema"),
+//                new DefaultModification(ModificationOperation.REPLACE_ATTRIBUTE, "m-disabled", "FALSE")
+//        );
+
         addHubPartition();
         buildLdapServer();
+    }
+
+    private void copyLdif(Path destinationDir, String sourceName, String destinationName) throws IOException {
+        Files.createDirectories(destinationDir);
+        try (
+                InputStream ldif = getClass().getClassLoader().getResourceAsStream(sourceName);
+                FileOutputStream target = new FileOutputStream(destinationDir.resolve(destinationName).toFile())
+        ) {
+            IOUtils.copy(ldif, target);
+        }
     }
 
     private void addHubPartition() throws LdapException {
@@ -314,7 +321,7 @@ public class HubLdap {
         }
 
         @Override
-        public void addUser(String name, String id, String mail, String login, Set<String> groups) {
+        public void addUser(String name, String id, String mail, String login, Set<String> groups, Set<String> publicKeys) {
             final String userDn = "cn=" + name + ",ou=Users," + dcDn;
 
             final Set<String> attributes = groups.stream()
@@ -323,14 +330,19 @@ public class HubLdap {
                                                  .map(g -> "memberOf:" + g)
                                                  .collect(Collectors.toSet());
 
+            attributes.addAll(publicKeys.stream()
+                                        .map(k -> "sshPublicKey:" + k)
+                                        .collect(Collectors.toSet()));
+
             attributes.add("objectClass:top");
             attributes.add("objectClass:inetOrgPerson");
             attributes.add("objectClass:organizationalPerson");
             attributes.add("objectClass:person");
             attributes.add("objectClass:microsoftPrincipal");
+            attributes.add("objectClass:ldapPublicKey");
             attributes.add("description:" + id);
             attributes.add("cn:" + name);
-            attributes.add("sn: ");
+            attributes.add("sn: .");
             attributes.add("mail:" + mail);
             attributes.add("uid:" + login);
             addStaticData(userDn, attributes.toArray(new String[0]));
@@ -344,7 +356,8 @@ public class HubLdap {
                         directoryService.getAdminSession().modify(groupDn, defaultModification);
                     }
                     catch (LdapException e) {
-                        e.printStackTrace();
+                        LOGGER.warn("Could not add user {} to group {}", userDn, groupDn);
+                        LOGGER.warn(e.getMessage(), e);
                     }
                 }
             }

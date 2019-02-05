@@ -13,7 +13,7 @@ public interface Directory {
 
     void delete(Dn dn);
 
-    void addUser(String name, String id, String mail, String login, Set<String> groups);
+    void addUser(String name, String id, String mail, String login, Set<String> groups, Set<String> publicKeys);
 
     Cursor<Entry> findAllUsers();
 

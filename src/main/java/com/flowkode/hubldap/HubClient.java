@@ -1,9 +1,6 @@
 package com.flowkode.hubldap;
 
-import com.flowkode.hubldap.data.AuthResponse;
-import com.flowkode.hubldap.data.User;
-import com.flowkode.hubldap.data.UserGroupsResponse;
-import com.flowkode.hubldap.data.UsersResponse;
+import com.flowkode.hubldap.data.*;
 import retrofit2.Call;
 import retrofit2.http.*;
 
@@ -27,7 +24,10 @@ public interface HubClient {
     Call<User> getUser(@Header("Authorization") String credentials, @Path("userId") String userId);
 
     @GET("usergroups/{groupId}")
-    Call<User> getUserGroup(@Header("Authorization") String credentials, @Path("groupId") String groupId);
+    Call<UserGroup> getUserGroup(@Header("Authorization") String credentials, @Path("groupId") String groupId);
+
+    @GET("users/{userId}/sshpublickeys")
+    Call<SshKeysResponse> getUserKeys(@Header("Authorization") String authorization, @Path("userId") String userId, @Query("$skip") int start, @Query("$top") int limit);
 
     default Call<AuthResponse> userLogin(String authorization, String username, String password) {
         return userLogin(authorization, "0-0-0-0-0", "password", username, password);
@@ -36,4 +36,5 @@ public interface HubClient {
     default Call<AuthResponse> serviceLogin(@Header("Authorization") String credentials) {
         return serviceLogin(credentials, "0-0-0-0-0", "client_credentials");
     }
+
 }

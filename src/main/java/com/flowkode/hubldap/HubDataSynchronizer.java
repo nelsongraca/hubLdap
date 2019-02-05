@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -23,6 +24,8 @@ public class HubDataSynchronizer {
     private static final Logger LOGGER = LoggerFactory.getLogger(HubDataSynchronizer.class);
 
     private static final int CHUNK_SIZE = 10;
+
+    private static final int MAX_SSH_KEYS = 100;
 
     private final HubClient hubClient;
 
@@ -77,12 +80,17 @@ public class HubDataSynchronizer {
             total = body.getTotal();
 
             for (User user : body.getUsers()) {
+                final Response<SshKeysResponse> keysResponse = hubClient.getUserKeys(authToken, user.getId(), 0, MAX_SSH_KEYS).execute();
+                final Set<String> userKeys = Arrays.stream(keysResponse.body().getSshKeys())
+                                                   .map(SshKey::getOpenSshKey)
+                                                   .collect(Collectors.toSet());
                 directory.addUser(
                         user.getName(),
                         user.getId(),
                         Optional.of(user.getProfile()).map(Profile::getEmail).map(Email::getEmail).orElse(""),
                         user.getLogin(),
-                        Arrays.stream(user.getGroups()).map(UserGroup::getId).collect(Collectors.toSet())
+                        Arrays.stream(user.getGroups()).map(UserGroup::getId).collect(Collectors.toSet()),
+                        userKeys
                 );
 
                 LOGGER.debug("Found user: {}", user.getName());
@@ -132,8 +140,10 @@ public class HubDataSynchronizer {
             while (search != null && search.next()) {
                 final Entry entry = search.get();
                 final String groupId = entry.get("description").getString();
-                final Response<User> response = hubClient.getUserGroup(authToken, groupId).execute();
-                if (response.raw().code() == 404 || (response.isSuccessful() && !response.body().getId().equals(groupId))) {
+                final String groupName = entry.get("cn").getString();
+                final Response<UserGroup> response = hubClient.getUserGroup(authToken, groupId).execute();
+                if (response.raw().code() == 404
+                        || (response.isSuccessful() && (!response.body().getId().equals(groupId) || !response.body().getName().equals(groupName)))) {
                     directory.delete(entry.getDn());
                     LOGGER.debug("Removed group: {}", entry.getDn());
                 }
