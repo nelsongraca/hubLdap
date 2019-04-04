@@ -19,7 +19,7 @@
         <version.slf4j>1.7.25</version.slf4j>
 
         <version.apacheds>2.0.0.AM25</version.apacheds>
-        <version.apacheds-api>2.0.0.AM1</version.apacheds-api>
+        <version.apacheds-api>2.0.0.AM2</version.apacheds-api>
     </properties>
 
     <dependencies>

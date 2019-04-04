@@ -48,6 +48,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -77,6 +78,12 @@ public class HubLdap {
 
     private int serverPort = 10389;
 
+    private int sslServerPort = 10636;
+
+    private String keystoreFile;
+
+    private String certificatePassword;
+
     private SchemaManager schemaManager;
 
     private LdifPartition schemaLdifPartition;
@@ -89,16 +96,32 @@ public class HubLdap {
 
     private DirectoryService directoryService;
 
-    public HubLdap(String rootDomain, String adminPassword, Path workDir, HubClient hubClient, String serviceId, String serviceSecret) throws Exception {
+    public HubLdap(
+            String rootDomain,
+            String adminPassword,
+            Path workDir,
+            HubClient hubClient,
+            String serviceId,
+            String serviceSecret,
+            String keystoreFile,
+            String certificatePassword
+    ) throws Exception {
         this.adminPassword = adminPassword;
         this.rootDomain = rootDomain;
         this.serviceId = serviceId;
         this.serviceSecret = serviceSecret;
         this.hubClient = hubClient;
+        this.keystoreFile = keystoreFile;
+        this.certificatePassword = certificatePassword;
 
         final File normalizedWorkDir = workDir.toAbsolutePath().normalize().toFile();
         FileUtils.deleteDirectory(normalizedWorkDir);
         instanceLayout = new InstanceLayout(normalizedWorkDir);
+
+        final Path keyFilePath = Paths.get(this.keystoreFile);
+        if (!keyFilePath.toFile().exists()) {
+            CertificateUtils.generateKeyStore(keyFilePath, certificatePassword, "cn=HubLdap, o=HubLdap, c=US");
+        }
 
         configure();
     }
@@ -243,7 +266,18 @@ public class HubLdap {
         ldapServer = new LdapServer();
         ldapServer.setDirectoryService(directoryService);
         ldapServer.setEnabled(true);
-        ldapServer.setTransports(new TcpTransport(serverPort));
+
+        final TcpTransport ldapTransport = new TcpTransport(serverPort);
+
+        final TcpTransport ldapsTransport = new TcpTransport(sslServerPort);
+        ldapsTransport.enableSSL(true);
+        ldapsTransport.setEnabledCiphers(Cipher.getAllCiphers());
+
+        //add certificate
+        ldapServer.setKeystoreFile(keystoreFile);
+        ldapServer.setCertificatePassword(certificatePassword);
+
+        ldapServer.setTransports(ldapTransport, ldapsTransport);
     }
 
     public void start() throws Exception {

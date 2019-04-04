@@ -20,7 +20,8 @@ public class Main {
         if (!Files.isDirectory(jarDir)) {
             jarDir = jarDir.getParent();
         }
-        config.load(new FileReader(jarDir.toAbsolutePath().normalize().resolve("hubLdap.properties").toFile()));
+        jarDir = jarDir.toAbsolutePath().normalize();
+        config.load(new FileReader(jarDir.resolve("hubLdap.properties").toFile()));
 
         final Path workDir = jarDir.resolve("work");
         final String hubUrl = config.getProperty("hubUrl");
@@ -28,6 +29,8 @@ public class Main {
         final String adminPassword = config.getProperty("adminPassword", "admin");
         final String serviceId = config.getProperty("serviceId", "");
         final String serviceSecret = config.getProperty("serviceSecret", "");
+        final String keystoreFile = config.getProperty("keystoreFile", jarDir.resolve("keystore.p12").toString());
+        final String certificatePassword = config.getProperty("certificatePassword", "secret");
 
         Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl(hubUrl + "/api/rest/")
@@ -36,6 +39,6 @@ public class Main {
 
         HubClient hubClient = retrofit.create(HubClient.class);
 
-        new HubLdap(rootDomain, adminPassword, workDir, hubClient, serviceId, serviceSecret).start();
+        new HubLdap(rootDomain, adminPassword, workDir, hubClient, serviceId, serviceSecret, keystoreFile, certificatePassword).start();
     }
 }
