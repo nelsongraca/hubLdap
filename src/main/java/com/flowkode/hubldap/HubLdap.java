@@ -48,7 +48,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -103,7 +102,7 @@ public class HubLdap {
             HubClient hubClient,
             String serviceId,
             String serviceSecret,
-            String keystoreFile,
+            Path keystoreFile,
             String certificatePassword
     ) throws Exception {
         this.adminPassword = adminPassword;
@@ -111,16 +110,15 @@ public class HubLdap {
         this.serviceId = serviceId;
         this.serviceSecret = serviceSecret;
         this.hubClient = hubClient;
-        this.keystoreFile = keystoreFile;
+        this.keystoreFile = keystoreFile.toString();
         this.certificatePassword = certificatePassword;
 
         final File normalizedWorkDir = workDir.toAbsolutePath().normalize().toFile();
         FileUtils.deleteDirectory(normalizedWorkDir);
         instanceLayout = new InstanceLayout(normalizedWorkDir);
 
-        final Path keyFilePath = Paths.get(this.keystoreFile);
-        if (!keyFilePath.toFile().exists()) {
-            CertificateUtils.generateKeyStore(keyFilePath, certificatePassword, "cn=HubLdap, o=HubLdap, c=US");
+        if (!keystoreFile.toFile().exists()) {
+            CertificateUtils.generateKeyStore(keystoreFile, certificatePassword, "cn=HubLdap, o=HubLdap, c=US");
         }
 
         configure();

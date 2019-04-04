@@ -13,6 +13,7 @@ ARG JAR_FILE
 ADD /target/${JAR_FILE} /opt/hubLdap/hubLdap.jar
 
 EXPOSE 10389
+EXPOSE 10636
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD /usr/sbin/startup.sh

@@ -29,7 +29,6 @@ public class Main {
         final String adminPassword = config.getProperty("adminPassword", "admin");
         final String serviceId = config.getProperty("serviceId", "");
         final String serviceSecret = config.getProperty("serviceSecret", "");
-        final String keystoreFile = config.getProperty("keystoreFile", jarDir.resolve("keystore.p12").toString());
         final String certificatePassword = config.getProperty("certificatePassword", "secret");
 
         Retrofit retrofit = new Retrofit.Builder()
@@ -39,6 +38,6 @@ public class Main {
 
         HubClient hubClient = retrofit.create(HubClient.class);
 
-        new HubLdap(rootDomain, adminPassword, workDir, hubClient, serviceId, serviceSecret, keystoreFile, certificatePassword).start();
+        new HubLdap(rootDomain, adminPassword, workDir, hubClient, serviceId, serviceSecret, jarDir.resolve("keystore.p12"), certificatePassword).start();
     }
 }
