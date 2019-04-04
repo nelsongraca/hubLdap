@@ -25,7 +25,7 @@ The certificate password can ne set with the property `certificatePassword` in t
 
 ### Docker
 
-    docker --name hubLdap \
+    docker run --name hubLdap \
     -e"HUB_URL=http://localhost:8080/hub" \
     -e"ROOT_DOMAIN=hub.local" \
     -e"ADMIN_PASSWORD=test" \
