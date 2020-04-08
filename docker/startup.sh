@@ -8,4 +8,8 @@ echo "serviceId=${SERVICE_ID}" >> /opt/hubLdap/hubLdap.properties
 echo "serviceSecret=${SERVICE_SECRET}" >> /opt/hubLdap/hubLdap.properties
 echo "certificatePassword=${CERTIFICATE_PASSWORD:-secret}" >> /opt/hubLdap/hubLdap.properties
 
-java -jar /opt/hubLdap/hubLdap.jar
+FINAL_JAVA_OPTS="${JAVA_OPTS} -Djava.net.preferIPv4Stack=true"
+
+echo java ${FINAL_JAVA_OPTS} -jar /opt/hubLdap/hubLdap.jar
+
+java ${FINAL_JAVA_OPTS} -jar /opt/hubLdap/hubLdap.jar
