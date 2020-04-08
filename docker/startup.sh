@@ -1,4 +1,4 @@
-#!/bin/ash
+#!/bin/bash
 
 echo "" > /opt/hubLdap/hubLdap.properties
 echo "hubUrl=${HUB_URL}" >> /opt/hubLdap/hubLdap.properties
