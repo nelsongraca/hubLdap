@@ -26,7 +26,6 @@ import org.apache.directory.api.util.IOUtils;
 import org.apache.directory.api.util.exception.Exceptions;
 import org.apache.directory.server.constants.ServerDNConstants;
 import org.apache.directory.server.core.DefaultDirectoryService;
-import org.apache.directory.server.core.api.CacheService;
 import org.apache.directory.server.core.api.DirectoryService;
 import org.apache.directory.server.core.api.DnFactory;
 import org.apache.directory.server.core.api.InstanceLayout;
@@ -38,6 +37,7 @@ import org.apache.directory.server.core.partition.ldif.LdifPartition;
 import org.apache.directory.server.core.shared.DefaultDnFactory;
 import org.apache.directory.server.i18n.I18n;
 import org.apache.directory.server.ldap.LdapServer;
+import org.apache.directory.server.ldap.handlers.extended.StartTlsHandler;
 import org.apache.directory.server.protocol.shared.transport.TcpTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,7 +87,6 @@ public class HubLdap {
 
     private LdifPartition schemaLdifPartition;
 
-    private CacheService cacheService = new CacheService();
 
     private DnFactory dnFactory;
 
@@ -158,7 +157,6 @@ public class HubLdap {
         // Store the default directories
         directoryService.setInstanceLayout(instanceLayout);
 
-        directoryService.setCacheService(cacheService);
         directoryService.setAllowAnonymousAccess(false);
 
         directoryService.startup();
@@ -175,8 +173,6 @@ public class HubLdap {
     private void configure() throws Exception {
         Files.createDirectories(instanceLayout.getPartitionsDirectory().toPath().normalize());
 
-        //init cache
-        cacheService.initialize(instanceLayout);
 
         //init and load schema
         final Path schemaPath = instanceLayout.getPartitionsDirectory().toPath().resolve("schema");
@@ -201,7 +197,7 @@ public class HubLdap {
             throw new Exception(I18n.err(I18n.ERR_317, Exceptions.printErrors(errors)));
         }
 
-        dnFactory = new DefaultDnFactory(schemaManager, cacheService.getCache("dnCache"));
+        dnFactory = new DefaultDnFactory(schemaManager, 100);
 
         dcDn = "dc=" + Arrays.stream(rootDomain.split("\\.")).collect(Collectors.joining(",dc="));
 
@@ -269,18 +265,19 @@ public class HubLdap {
 
         final TcpTransport ldapsTransport = new TcpTransport(sslServerPort);
         ldapsTransport.enableSSL(true);
-        ldapsTransport.setEnabledCiphers(Cipher.getAllCiphers());
 
         //add certificate
         ldapServer.setKeystoreFile(keystoreFile);
         ldapServer.setCertificatePassword(certificatePassword);
 
         ldapServer.setTransports(ldapTransport, ldapsTransport);
+        ldapServer.setExtendedOperationHandlers(Collections.singletonList(new StartTlsHandler()));
     }
 
     public void start() throws Exception {
         ldapServer.start();
         dataSynchronizer.startSync();
+        LOGGER.info("Started...");
     }
 
     private class DirectoryImpl implements Directory {

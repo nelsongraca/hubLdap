@@ -1,4 +1,4 @@
-FROM openjdk:8u242-slim
+FROM openjdk:11-slim
 
 # Install startup script for container
 COPY /docker/startup.sh /usr/sbin/startup.sh
