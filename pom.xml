@@ -161,7 +161,7 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <repository>ghcr.io/nelsongraca/hubLdap</repository>
+                    <repository>ghcr.io/nelsongraca/hubldap</repository>
                     <tag>${project.version}</tag>
                     <buildArgs>
                         <JAR_FILE>${project.build.finalName}.jar</JAR_FILE>
