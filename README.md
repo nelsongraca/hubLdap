@@ -34,4 +34,5 @@ The certificate password can ne set with the property `certificatePassword` in t
     -e"CERTIFICATE_PASSWORD=secret" \
     -p"10389:10389" \
     -p"10636:10636" \
-    nelsongraca/hubldap` 
+    nelsongraca/hubldap:1.0.0-SNAPSHOT
+
